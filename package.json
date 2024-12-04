@@ -11,5 +11,9 @@
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0",
     "@uniswap/v3-core": "^1.0.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17"
   }
 }
