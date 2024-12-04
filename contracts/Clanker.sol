@@ -56,6 +56,7 @@ contract Clanker is Ownable {
     );
 
     constructor(
+        address clankerTokenImplementation_,
         address taxCollector_,
         address weth_,
         address locker_,
@@ -65,6 +66,7 @@ contract Clanker is Ownable {
         address swapRouter_,
         address owner_
     ) Ownable(owner_) {
+        clankerTokenImplementation = clankerTokenImplementation_;
         taxCollector = taxCollector_;
         weth = weth_;
         liquidityLocker = ILockerFactory(locker_);
@@ -254,6 +256,10 @@ contract Clanker is Ownable {
 
     function toggleBundleFeeSwitch(bool _enabled) external onlyOwner {
         bundleFeeSwitch = _enabled;
+    }
+
+    function setClankerTokenImplementation(address newImplementation) external onlyOwner {
+        clankerTokenImplementation = newImplementation;
     }
 
     function setDeprecated(bool _deprecated) external onlyOwner {
