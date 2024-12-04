@@ -3,60 +3,20 @@ pragma solidity ^0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 //import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {TickMath} from "./TickMath.sol";
 
-import {INonfungiblePositionManager, IUniswapV3Factory, ILockerFactory, ILocker, ExactInputSingleParams, ISwapRouter} from "./interface.sol";
+import {IClankerToken, INonfungiblePositionManager, IUniswapV3Factory, ILockerFactory, ILocker, ExactInputSingleParams, ISwapRouter} from "./interface.sol";
 import {Bytes32AddressLib} from "./Bytes32AddressLib.sol";
-
-contract Token is ERC20 {
-    string private _name;
-    string private _symbol;
-    uint8 private immutable _decimals;
-
-    address private _deployer;
-    uint256 private _fid;
-    string private _image;
-    string private _castHash;
-
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        uint256 maxSupply_,
-        address deployer_,
-        uint256 fid_,
-        string memory image_,
-        string memory castHash_
-    ) ERC20(name_, symbol_) {
-        _deployer = deployer_;
-        _fid = fid_;
-        _image = image_;
-        _castHash = castHash_;
-        _mint(msg.sender, maxSupply_);
-    }
-
-    function fid() public view returns (uint256) {
-        return _fid;
-    }
-
-    function deployer() public view returns (address) {
-        return _deployer;
-    }
-
-    function image() public view returns (string memory) {
-        return _image;
-    }
-
-    function castHash() public view returns (string memory) {
-        return _castHash;
-    }
-}
 
 contract Clanker is Ownable {
     using TickMath for int24;
     using Bytes32AddressLib for bytes32;
 
     error Deprecated();
+
+    address public clankerTokenImplementation;
 
     address public taxCollector;
     uint64 public defaultLockingPeriod = 33275115461;
@@ -72,6 +32,16 @@ contract Clanker is Ownable {
 
     bool public deprecated;
     bool public bundleFeeSwitch;
+
+    struct TokenConfig {
+        string name;
+        string symbol;
+        uint256 supply;
+        address deployer;
+        uint256 fid;
+        string image;
+        string castHash;
+    }
 
     event TokenCreated(
         address tokenAddress,
@@ -105,17 +75,11 @@ contract Clanker is Ownable {
     }
 
     function deployToken(
-        string calldata _name,
-        string calldata _symbol,
-        uint256 _supply,
+        TokenConfig memory config,
         int24 _initialTick,
         uint24 _fee,
-        bytes32 _salt,
-        address _deployer,
-        uint256 _fid,
-        string memory _image,
-        string memory _castHash
-    ) external payable onlyOwner returns (Token token, uint256 tokenId) {
+        bytes32 _salt
+    ) external payable onlyOwner returns (IClankerToken token, uint256 tokenId) {
         if (deprecated) revert Deprecated();
 
         int24 tickSpacing = uniswapV3Factory.feeAmountTickSpacing(_fee);
@@ -125,14 +89,24 @@ contract Clanker is Ownable {
             "Invalid tick"
         );
 
-        token = new Token{salt: keccak256(abi.encode(_deployer, _salt))}(
-            _name,
-            _symbol,
-            _supply,
-            _deployer,
-            _fid,
-            _image,
-            _castHash
+        //token = new Token{salt: keccak256(abi.encode(_deployer, _salt))}(
+        //    _name,
+        //    _symbol,
+        //    _supply,
+        //    _deployer,
+        //    _fid,
+        //    _image,
+        //    _castHash
+        //);
+        bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
+        token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
+        token.initialize( config.name,
+            config.symbol,
+            config.supply,
+            config.deployer,
+            config.fid,
+            config.image,
+            config.castHash
         );
 
         // Makes sure that the token address is less than the WETH address. This is so that the token
@@ -150,7 +124,7 @@ contract Clanker is Ownable {
                 _fee,
                 _initialTick,
                 maxUsableTick(tickSpacing),
-                _supply,
+                config.supply,
                 0,
                 0,
                 0,
@@ -158,12 +132,12 @@ contract Clanker is Ownable {
                 block.timestamp
             );
 
-        token.approve(address(positionManager), _supply);
+        token.approve(address(positionManager), config.supply);
         (tokenId, , , ) = positionManager.mint(params);
 
         address lockerAddress = liquidityLocker.deploy(
             address(positionManager),
-            _deployer,
+            config.deployer,
             defaultLockingPeriod,
             tokenId,
             lpFeesCut
@@ -192,7 +166,7 @@ contract Clanker is Ownable {
                 tokenIn: weth, // The token we are exchanging from (ETH wrapped as WETH)
                 tokenOut: address(token), // The token we are exchanging to
                 fee: _fee, // The pool fee
-                recipient: _deployer, // The recipient address
+                recipient: config.deployer, // The recipient address
                 amountIn: remainingFundsToBuyTokens, // The amount of ETH (WETH) to be swapped
                 amountOutMinimum: 0, // Minimum amount to receive
                 sqrtPriceLimitX96: 0 // No price limit
@@ -207,13 +181,13 @@ contract Clanker is Ownable {
         emit TokenCreated(
             address(token),
             tokenId,
-            _deployer,
-            _fid,
-            _name,
-            _symbol,
-            _supply,
+            config.deployer,
+            config.fid,
+            config.name,
+            config.symbol,
+            config.supply,
             lockerAddress,
-            _castHash
+            config.castHash
         );
     }
 
@@ -242,29 +216,13 @@ contract Clanker is Ownable {
         uint256 supply,
         bytes32 salt
     ) public view returns (address) {
-        bytes32 create2Salt = keccak256(abi.encode(deployer, salt));
-        return
-            keccak256(
-                abi.encodePacked(
-                    bytes1(0xFF),
-                    address(this),
-                    create2Salt,
-                    keccak256(
-                        abi.encodePacked(
-                            type(Token).creationCode,
-                            abi.encode(
-                                name,
-                                symbol,
-                                supply,
-                                deployer,
-                                fid,
-                                image,
-                                castHash
-                            )
-                        )
-                    )
-                )
-            ).fromLast20Bytes();
+        //bytes32 create2Salt = keccak256(abi.encode(deployer, salt));
+        bytes32 _salt = keccak256(abi.encode(deployer, salt));
+        address predictedTokenAddress = Clones.predictDeterministicAddress(
+            clankerTokenImplementation,
+            _salt
+        );
+        return predictedTokenAddress;
     }
 
     function generateSalt(

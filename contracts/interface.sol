@@ -1,6 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
+interface IClankerToken {
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        uint256 maxSupply_,
+        address deployer_,
+        uint256 fid_,
+        string memory image_,
+        string memory castHash_
+    ) external;
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function fid() external view returns (uint256);
+
+    function deployer() external view returns (address);
+
+    function image() external view returns (string memory);
+
+    function castHash() external view returns (string memory);
+}
+
 interface INonfungiblePositionManager {
     struct MintParams {
         address token0;
