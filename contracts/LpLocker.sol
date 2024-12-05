@@ -3,7 +3,8 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -22,7 +23,7 @@ interface INonfungiblePositionManager is IERC721 {
     ) external payable returns (uint256 amount0, uint256 amount1);
 }
 
-contract LpLocker is Ownable, IERC721Receiver {
+contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
     event ERC721Released(address indexed token, uint256 amount);
 
     event LockId(uint256 _id);
@@ -43,25 +44,42 @@ contract LpLocker is Ownable, IERC721Receiver {
     uint256 private _released;
     mapping(address => uint256) public _erc721Released;
     IERC721 private SafeERC721;
-    uint64 private immutable _duration;
-    address private immutable e721Token;
+    uint64 private _duration;
+    address private e721Token;
     bool private flag;
     NonFungibleContract private positionManager;
     string public constant version = "0.0.1";
     uint256 public _fee;
     address public _feeRecipient;
 
-    /**
-     * @dev Sets the sender as the initial owner, the beneficiary as the pending owner, and the duration for the lock
-     * vesting duration of the vesting wallet.
-     */
-    constructor(
+
+    //function initializer(uint256 token_id) public {
+    //    require(flag == false, "contract already initialized");
+    //    _erc721Released[e721Token] = token_id;
+    //    flag = true;
+    //    positionManager = NonFungibleContract(e721Token);
+
+    //    if (positionManager.ownerOf(token_id) != address(this)) {
+    //        SafeERC721.transferFrom(owner(), address(this), token_id);
+    //    }
+
+    //    emit LockId(token_id);
+    //}
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
         address token,
         address beneficiary,
         uint64 durationSeconds,
         uint256 fee,
-        address feeRecipient
-    ) payable Ownable(beneficiary) {
+        address feeRecipient,
+        uint256 token_id
+    ) initializer public {
+        __Ownable_init(beneficiary);
         _duration = durationSeconds;
         SafeERC721 = IERC721(token);
         //already false but lets be safe
@@ -70,14 +88,9 @@ contract LpLocker is Ownable, IERC721Receiver {
         _fee = fee;
         _feeRecipient = feeRecipient;
         emit LockDuration(durationSeconds);
-    }
-
-    function initializer(uint256 token_id) public {
-        require(flag == false, "contract already initialized");
         _erc721Released[e721Token] = token_id;
-        flag = true;
-        positionManager = NonFungibleContract(e721Token);
 
+        positionManager = NonFungibleContract(e721Token);
         if (positionManager.ownerOf(token_id) != address(this)) {
             SafeERC721.transferFrom(owner(), address(this), token_id);
         }
