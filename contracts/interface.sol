@@ -1,15 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
+interface ITokenFactory {
+
+    function deployToken(
+        IClankerToken.TokenConfig calldata config,
+        bytes32 salt
+    ) external payable returns (address);
+
+    function predictToken(
+        IClankerToken.TokenConfig calldata config,
+        bytes32 salt
+    ) external view returns (address);
+
+    function generateSalt(
+        IClankerToken.TokenConfig calldata config
+    ) external view returns (bytes32 salt, address token);
+}
+
 interface IClankerToken {
+    struct TokenConfig {
+        string name;
+        string symbol;
+        uint256 supply;
+        address deployer;
+        uint256 fid;
+        string image;
+        string castHash;
+        bytes tokenData;
+    }
     function initialize(
-        string memory name_,
-        string memory symbol_,
-        uint256 maxSupply_,
-        address deployer_,
-        uint256 fid_,
-        string memory image_,
-        string memory castHash_
+        TokenConfig calldata config
     ) external;
 
     function approve(address spender, uint256 amount) external returns (bool);

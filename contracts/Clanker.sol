@@ -2,19 +2,23 @@
 pragma solidity ^0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+//import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 //import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {TickMath} from "./TickMath.sol";
 
-import {IClankerToken, INonfungiblePositionManager, IUniswapV3Factory, ILockerFactory, ILocker, ExactInputSingleParams, ISwapRouter} from "./interface.sol";
+import {IClankerToken, ITokenFactory, INonfungiblePositionManager, IUniswapV3Factory, ILockerFactory, ILocker, ExactInputSingleParams, ISwapRouter} from "./interface.sol";
 import {Bytes32AddressLib} from "./Bytes32AddressLib.sol";
 
-contract Clanker is Ownable {
+contract Clanker is AccessControl {
     using TickMath for int24;
     using Bytes32AddressLib for bytes32;
 
     error Deprecated();
+
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    bytes32 public constant DEPLOYER_ROLE = keccak256("DEPLOYER_ROLE");
 
     address public clankerTokenImplementation;
 
@@ -33,6 +37,8 @@ contract Clanker is Ownable {
     bool public deprecated;
     bool public bundleFeeSwitch;
 
+    mapping(address => bool) public registeredTokenFactories;
+
     struct TokenConfig {
         string name;
         string symbol;
@@ -41,6 +47,7 @@ contract Clanker is Ownable {
         uint256 fid;
         string image;
         string castHash;
+        bytes tokenData;
     }
 
     event TokenCreated(
@@ -65,7 +72,10 @@ contract Clanker is Ownable {
         uint64 defaultLockingPeriod_,
         address swapRouter_,
         address owner_
-    ) Ownable(owner_) {
+    ) {
+        _grantRole(DEFAULT_ADMIN_ROLE, owner_);
+        _grantRole(MANAGER_ROLE, owner_);
+        _grantRole(DEPLOYER_ROLE, owner_);
         clankerTokenImplementation = clankerTokenImplementation_;
         taxCollector = taxCollector_;
         weth = weth_;
@@ -77,11 +87,11 @@ contract Clanker is Ownable {
     }
 
     function deployToken(
-        TokenConfig memory config,
+        IClankerToken.TokenConfig memory config,
         int24 _initialTick,
         uint24 _fee,
         bytes32 _salt
-    ) external payable onlyOwner returns (IClankerToken token, uint256 tokenId) {
+    ) external payable onlyRole(DEPLOYER_ROLE) returns (IClankerToken token, uint256 tokenId) {
         if (deprecated) revert Deprecated();
 
         int24 tickSpacing = uniswapV3Factory.feeAmountTickSpacing(_fee);
@@ -102,14 +112,7 @@ contract Clanker is Ownable {
         //);
         bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
         token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
-        token.initialize( config.name,
-            config.symbol,
-            config.supply,
-            config.deployer,
-            config.fid,
-            config.image,
-            config.castHash
-        );
+        token.initialize(config);
 
         // Makes sure that the token address is less than the WETH address. This is so that the token
         // is first in the pool. Just makes things consistent.
@@ -254,35 +257,39 @@ contract Clanker is Ownable {
         }
     }
 
-    function toggleBundleFeeSwitch(bool _enabled) external onlyOwner {
+    function toggleBundleFeeSwitch(bool _enabled) external onlyRole(MANAGER_ROLE) {
         bundleFeeSwitch = _enabled;
     }
 
-    function setClankerTokenImplementation(address newImplementation) external onlyOwner {
+    function setClankerTokenImplementation(address newImplementation) external onlyRole(MANAGER_ROLE) {
         clankerTokenImplementation = newImplementation;
     }
 
-    function setDeprecated(bool _deprecated) external onlyOwner {
+    function registerTokenFactory(address factory, bool enabled) external onlyRole(MANAGER_ROLE) {
+        registeredTokenFactories[factory] = enabled;
+    }
+
+    function setDeprecated(bool _deprecated) external onlyRole(MANAGER_ROLE) {
         deprecated = _deprecated;
     }
 
-    function updateTaxCollector(address newCollector) external onlyOwner {
+    function updateTaxCollector(address newCollector) external onlyRole(MANAGER_ROLE) {
         taxCollector = newCollector;
     }
 
-    function updateLiquidityLocker(address newLocker) external onlyOwner {
+    function updateLiquidityLocker(address newLocker) external onlyRole(MANAGER_ROLE) {
         liquidityLocker = ILockerFactory(newLocker);
     }
 
-    function updateDefaultLockingPeriod(uint64 newPeriod) external onlyOwner {
+    function updateDefaultLockingPeriod(uint64 newPeriod) external onlyRole(MANAGER_ROLE) {
         defaultLockingPeriod = newPeriod;
     }
 
-    function updateProtocolFees(uint8 newFee) external onlyOwner {
+    function updateProtocolFees(uint8 newFee) external onlyRole(MANAGER_ROLE) {
         lpFeesCut = newFee;
     }
 
-    function updateTaxRate(uint8 newRate) external onlyOwner {
+    function updateTaxRate(uint8 newRate) external onlyRole(MANAGER_ROLE) {
         taxRate = newRate;
     }
 }
