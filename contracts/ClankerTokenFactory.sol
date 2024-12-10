@@ -17,6 +17,7 @@ contract ClankerTokenFactory is ITokenFactory, AccessControl {
     address public clankerTokenImplementation;
     bool public deprecated;
     address public weth;
+    address public lockerFactory;
 
     event TokenCreated(
         address tokenAddress,
@@ -33,13 +34,15 @@ contract ClankerTokenFactory is ITokenFactory, AccessControl {
     constructor(
         address clankerTokenImplementation_,
         address weth_,
-        address owner_
+        address owner_,
+        address lockerFactory_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(MANAGER_ROLE, owner_);
         _grantRole(DEPLOYER_ROLE, owner_);
         clankerTokenImplementation = clankerTokenImplementation_;
         weth = weth_;
+        lockerFactory = lockerFactory_;
     }
 
     function deployToken(
@@ -49,7 +52,7 @@ contract ClankerTokenFactory is ITokenFactory, AccessControl {
         if (deprecated) revert Deprecated();
         bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
         IClankerToken token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
-        token.initialize(config);
+        token.initialize(config, lockerFactory);
         // transfer token supply to caller. Note: a token factory could transfer only a portion of the supply, if desired
         IERC20(address(token)).transfer(msg.sender, config.supply);
         return address(token);
