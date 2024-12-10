@@ -14,7 +14,7 @@ Some of the following changes provide convenience, operation efficiencies, or ne
 
 - *use OpenZeppelin Clones for create2*. For both the locker factory and the (new) token factories, `Clones` is used for two reasons: 1) gas savings, 2) convenience for predicting `create2` contract addresses
 
-- added a `locker()` function to each clanker token contract, to faciliate fee claiming
+- added a `locker()` function to each clanker token contract. This returns the address of the locker holding the LP. _This could make fee claiming easier_.
 
 - moved token deployment to modular token factories.
 - support for multiple token factories:
