@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {IClankerToken} from "./interface.sol";
+import {IClankerToken, ILockerFactory} from "./interface.sol";
 
 contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
     string private _name;
@@ -14,6 +14,7 @@ contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
     uint256 private _fid;
     string private _image;
     string private _castHash;
+    address private _lockerFactory;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -21,7 +22,8 @@ contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
     }
 
     function initialize(
-        TokenConfig calldata config
+        TokenConfig calldata config,
+        address lockerFactory
     ) override initializer public {
         //__ClankerToken_init(config.name, config.symbol, config.deployer, config.fid, config.image, config.castHash, config.supply);
         __ERC20_init(config.name, config.symbol);
@@ -30,6 +32,7 @@ contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
         _image = config.image;
         _castHash = config.castHash;
         _mint(msg.sender, config.supply);
+        _lockerFactory = lockerFactory;
     }
 
     function fid() public view returns (uint256) {
@@ -46,5 +49,9 @@ contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
 
     function castHash() public view returns (string memory) {
         return _castHash;
+    }
+
+    function locker() public view returns (address) {
+        return ILockerFactory(_lockerFactory).lockerAddress(address(this));
     }
 }

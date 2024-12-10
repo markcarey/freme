@@ -30,7 +30,8 @@ interface IClankerToken {
         bytes tokenData;
     }
     function initialize(
-        TokenConfig calldata config
+        TokenConfig calldata config,
+        address lockerFactory
     ) external;
 
     function fid() external view returns (uint256);
@@ -40,6 +41,8 @@ interface IClankerToken {
     function image() external view returns (string memory);
 
     function castHash() external view returns (string memory);
+
+    function locker() external view returns (address);
 }
 
 interface INonfungiblePositionManager {
@@ -114,6 +117,8 @@ interface ILockerFactory {
         uint256 tokenId,
         uint256 fees
     ) external payable returns (address);
+
+    function lockerAddress(address token) external view returns (address);
 }
 
 interface ILocker {

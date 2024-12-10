@@ -71,6 +71,11 @@ contract LockerFactory is Ownable(msg.sender) {
         return newLockerAddress;
     }
 
+    function lockerAddress(address token) public view returns (address) {
+        bytes32 salt = keccak256(abi.encode(token));
+        return Clones.predictDeterministicAddress(lockerImplementation, salt);
+    }
+
     function setFeeRecipient(address _feeRecipient) public onlyOwner {
         feeRecipient = _feeRecipient;
     }
