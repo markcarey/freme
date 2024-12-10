@@ -3,8 +3,9 @@ pragma solidity ^0.8.25;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {IClankerToken} from "./interface.sol";
 
-contract ClankerToken is Initializable, ERC20Upgradeable {
+contract ClankerToken is IClankerToken, Initializable, ERC20Upgradeable {
     string private _name;
     string private _symbol;
     uint8 private immutable _decimals;
@@ -20,20 +21,15 @@ contract ClankerToken is Initializable, ERC20Upgradeable {
     }
 
     function initialize(
-        string memory name_,
-        string memory symbol_,
-        uint256 maxSupply_,
-        address deployer_,
-        uint256 fid_,
-        string memory image_,
-        string memory castHash_
-    ) initializer public {
-        __ERC20_init(name_, symbol_);
-        _deployer = deployer_;
-        _fid = fid_;
-        _image = image_;
-        _castHash = castHash_;
-        _mint(msg.sender, maxSupply_);
+        TokenConfig calldata config
+    ) override initializer public {
+        //__ClankerToken_init(config.name, config.symbol, config.deployer, config.fid, config.image, config.castHash, config.supply);
+        __ERC20_init(config.name, config.symbol);
+        _deployer = config.deployer;
+        _fid = config.fid;
+        _image = config.image;
+        _castHash = config.castHash;
+        _mint(msg.sender, config.supply);
     }
 
     function fid() public view returns (uint256) {

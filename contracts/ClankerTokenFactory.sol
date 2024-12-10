@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 //import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -50,6 +50,8 @@ contract ClankerTokenFactory is ITokenFactory, AccessControl {
         bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
         IClankerToken token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
         token.initialize(config);
+        // transfer token supply to caller. Note: a token factory could transfer only a portion of the supply, if desired
+        IERC20(address(token)).transfer(msg.sender, config.supply);
         return address(token);
     }
 

@@ -33,8 +33,6 @@ interface IClankerToken {
         TokenConfig calldata config
     ) external;
 
-    function approve(address spender, uint256 amount) external returns (bool);
-
     function fid() external view returns (uint256);
 
     function deployer() external view returns (address);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 //import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -20,8 +20,6 @@ contract Clanker is AccessControl {
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant DEPLOYER_ROLE = keccak256("DEPLOYER_ROLE");
 
-    address public clankerTokenImplementation;
-
     address public taxCollector;
     uint64 public defaultLockingPeriod = 33275115461;
     uint8 public taxRate = 25; // 25 / 1000 -> 2.5 %
@@ -39,17 +37,6 @@ contract Clanker is AccessControl {
 
     mapping(address => bool) public registeredTokenFactories;
 
-    struct TokenConfig {
-        string name;
-        string symbol;
-        uint256 supply;
-        address deployer;
-        uint256 fid;
-        string image;
-        string castHash;
-        bytes tokenData;
-    }
-
     event TokenCreated(
         address tokenAddress,
         uint256 lpNftId,
@@ -63,7 +50,7 @@ contract Clanker is AccessControl {
     );
 
     constructor(
-        address clankerTokenImplementation_,
+        address defaultTokenFactory_,
         address taxCollector_,
         address weth_,
         address locker_,
@@ -76,7 +63,7 @@ contract Clanker is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(MANAGER_ROLE, owner_);
         _grantRole(DEPLOYER_ROLE, owner_);
-        clankerTokenImplementation = clankerTokenImplementation_;
+        registeredTokenFactories[defaultTokenFactory_] = true;
         taxCollector = taxCollector_;
         weth = weth_;
         liquidityLocker = ILockerFactory(locker_);
@@ -90,8 +77,9 @@ contract Clanker is AccessControl {
         IClankerToken.TokenConfig memory config,
         int24 _initialTick,
         uint24 _fee,
-        bytes32 _salt
-    ) external payable onlyRole(DEPLOYER_ROLE) returns (IClankerToken token, uint256 tokenId) {
+        bytes32 _salt,
+        address _tokenFactory
+    ) external payable onlyRole(DEPLOYER_ROLE) returns (address tokenAddress, uint256 tokenId) {
         if (deprecated) revert Deprecated();
 
         int24 tickSpacing = uniswapV3Factory.feeAmountTickSpacing(_fee);
@@ -110,9 +98,12 @@ contract Clanker is AccessControl {
         //    _image,
         //    _castHash
         //);
-        bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
-        token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
-        token.initialize(config);
+        //bytes32 salt = keccak256(abi.encode(config.deployer, _salt));
+        //token = IClankerToken(Clones.cloneDeterministic(clankerTokenImplementation, salt));
+        //token.initialize(config);
+        require(registeredTokenFactories[_tokenFactory], "Invalid factory");
+        tokenAddress = ITokenFactory(_tokenFactory).deployToken(config, _salt);
+        IERC20 token = IERC20(tokenAddress);
 
         // Makes sure that the token address is less than the WETH address. This is so that the token
         // is first in the pool. Just makes things consistent.
@@ -129,7 +120,7 @@ contract Clanker is AccessControl {
                 _fee,
                 _initialTick,
                 maxUsableTick(tickSpacing),
-                config.supply,
+                token.balanceOf(address(this)), //config.supply,
                 0,
                 0,
                 0,
@@ -137,7 +128,7 @@ contract Clanker is AccessControl {
                 block.timestamp
             );
 
-        token.approve(address(positionManager), config.supply);
+        token.approve(address(positionManager), token.balanceOf(address(this)));
         (tokenId, , , ) = positionManager.mint(params);
 
         address lockerAddress = liquidityLocker.deploy(
@@ -212,57 +203,23 @@ contract Clanker is AccessControl {
     }
 
     function predictToken(
-        address deployer,
-        uint256 fid,
-        string calldata name,
-        string calldata symbol,
-        string calldata image,
-        string calldata castHash,
-        uint256 supply,
-        bytes32 salt
+        IClankerToken.TokenConfig memory config,
+        bytes32 _salt,
+        address _tokenFactory
     ) public view returns (address) {
-        //bytes32 create2Salt = keccak256(abi.encode(deployer, salt));
-        bytes32 _salt = keccak256(abi.encode(deployer, salt));
-        address predictedTokenAddress = Clones.predictDeterministicAddress(
-            clankerTokenImplementation,
-            _salt
-        );
+        address predictedTokenAddress = ITokenFactory(_tokenFactory).predictToken(config, _salt);
         return predictedTokenAddress;
     }
 
     function generateSalt(
-        address deployer,
-        uint256 fid,
-        string calldata name,
-        string calldata symbol,
-        string calldata image,
-        string calldata castHash,
-        uint256 supply
+        IClankerToken.TokenConfig memory config,
+        address _tokenFactory
     ) external view returns (bytes32 salt, address token) {
-        for (uint256 i; ; i++) {
-            salt = bytes32(i);
-            token = predictToken(
-                deployer,
-                fid,
-                name,
-                symbol,
-                image,
-                castHash,
-                supply,
-                salt
-            );
-            if (token < weth && token.code.length == 0) {
-                break;
-            }
-        }
+        return ITokenFactory(_tokenFactory).generateSalt(config);
     }
 
     function toggleBundleFeeSwitch(bool _enabled) external onlyRole(MANAGER_ROLE) {
         bundleFeeSwitch = _enabled;
-    }
-
-    function setClankerTokenImplementation(address newImplementation) external onlyRole(MANAGER_ROLE) {
-        clankerTokenImplementation = newImplementation;
     }
 
     function registerTokenFactory(address factory, bool enabled) external onlyRole(MANAGER_ROLE) {
