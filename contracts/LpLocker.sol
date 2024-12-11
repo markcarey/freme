@@ -4,7 +4,8 @@ pragma solidity ^0.8.26;
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+//import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -23,7 +24,7 @@ interface INonfungiblePositionManager is IERC721 {
     ) external payable returns (uint256 amount0, uint256 amount1);
 }
 
-contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
+contract LpLocker is Initializable, AccessControlUpgradeable, IERC721Receiver {
     event ERC721Released(address indexed token, uint256 amount);
 
     event LockId(uint256 _id);
@@ -41,6 +42,9 @@ contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
         uint256 totalAmount0
     );
 
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    bytes32 public constant COLLECTOR_ROLE = keccak256("COLLECTOR_ROLE");
+
     uint256 private _released;
     mapping(address => uint256) public _erc721Released;
     IERC721 private SafeERC721;
@@ -51,6 +55,7 @@ contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
     string public constant version = "0.0.1";
     uint256 public _fee;
     address public _feeRecipient;
+    address public _beneficiary;
 
 
     //function initializer(uint256 token_id) public {
@@ -79,7 +84,13 @@ contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
         address feeRecipient,
         uint256 token_id
     ) initializer public {
-        __Ownable_init(beneficiary);
+        //__Ownable_init(beneficiary);
+        __AccessControl_init();
+        _beneficiary = beneficiary;
+        _grantRole(DEFAULT_ADMIN_ROLE, beneficiary);
+        _grantRole(MANAGER_ROLE, beneficiary);
+        _grantRole(COLLECTOR_ROLE, feeRecipient);
+        _grantRole(COLLECTOR_ROLE, beneficiary);
         _duration = durationSeconds;
         SafeERC721 = IERC721(token);
         //already false but lets be safe
@@ -96,6 +107,10 @@ contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
         }
 
         emit LockId(token_id);
+    }
+
+    function owner() public view virtual returns (address) {
+        return _beneficiary;
     }
 
     /**
@@ -182,13 +197,16 @@ contract LpLocker is Initializable, OwnableUpgradeable, IERC721Receiver {
     }
 
     //Use collect fees to collect the fees
-    function collectFees(address _recipient, uint256 _tokenId) public {
-        require(owner() == msg.sender, "only owner can call");
+    function collectFees(address _recipient, uint256 _tokenId) public onlyRole(COLLECTOR_ROLE) {
+        //require(owner() == msg.sender, "only owner can call");
         (
             ,
             INonfungiblePositionManager nonfungiblePositionManager
         ) = _getAddresses();
-
+        // if called by a COLLECTOR other than the owner, force the _recipient to the _beneficiary
+        if (msg.sender != owner()) {
+            _recipient = _beneficiary;
+        }
         if (_fee == 0) {
             (uint256 amount0, uint256 amount1) = nonfungiblePositionManager
                 .collect(

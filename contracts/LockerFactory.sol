@@ -3,7 +3,8 @@ pragma solidity ^0.8.26;
 
 import {LpLocker} from "./LpLocker.sol";
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+//import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 interface ILpLocker {
@@ -17,7 +18,7 @@ interface ILpLocker {
     ) external;
 }
 
-contract LockerFactory is Ownable(msg.sender) {
+contract LockerFactory is AccessControl {
     event deployed(
         address indexed lockerAddress,
         address indexed owner,
@@ -27,9 +28,14 @@ contract LockerFactory is Ownable(msg.sender) {
 
     address public feeRecipient;
     address public lockerImplementation;
+    bytes32 public constant DEPLOYER_ROLE = keccak256("DEPLOYER_ROLE");
+    //bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     constructor() {
         feeRecipient = msg.sender;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEPLOYER_ROLE, msg.sender);
+        _grantRole(DEPLOYER_ROLE, feeRecipient);
     }
 
     function deploy(
@@ -76,7 +82,11 @@ contract LockerFactory is Ownable(msg.sender) {
         return Clones.predictDeterministicAddress(lockerImplementation, salt);
     }
 
-    function setFeeRecipient(address _feeRecipient) public onlyOwner {
+    function setLockerImplementation(address _lockerImplementation) public onlyRole(DEPLOYER_ROLE) {
+        lockerImplementation = _lockerImplementation;
+    }
+
+    function setFeeRecipient(address _feeRecipient) public onlyRole(DEPLOYER_ROLE) {
         feeRecipient = _feeRecipient;
     }
 }
